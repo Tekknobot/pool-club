@@ -1,0 +1,26 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="POOL CLUB | Classic Table"
+config/description="Companion game to Carrom. Mouse-first top-down pool against a shot-planning CPU."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+boot_splash/bg_color=Color(0, 0, 0, 1)
+config/icon="res://icon.svg"
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/mode=3
+window/size/window_width_override=1440
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+theme/default_font_size=16
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
