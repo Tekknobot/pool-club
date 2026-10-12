@@ -28,7 +28,14 @@ static func advance(balls:Array, dt:float) -> Dictionary:
 		if v.length_squared() <= REST_EPS * REST_EPS:
 			b["vel"] = Vector2.ZERO
 			continue
-		b["pos"] = (b["pos"] as Vector2) + v * dt
+		var translation := v * dt
+		b["pos"] = (b["pos"] as Vector2) + translation
+		# Rolling without slipping: travel distance / radius determines spin.
+		# The rotation is on the sphere texture only; collision physics is unchanged.
+		if translation.length_squared() > 0.00001:
+			var axis := Vector3(translation.y, -translation.x, 0.0).normalized()
+			var previous_spin: Quaternion = b["roll"]
+			b["roll"] = (Quaternion(axis, translation.length() / R) * previous_spin).normalized()
 		var new_speed := maxf(0, v.length() - FRICTION * dt)
 		b["vel"] = v.normalized() * new_speed if new_speed > REST_EPS else Vector2.ZERO
 		if _pocket(b):

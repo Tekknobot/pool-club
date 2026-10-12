@@ -3,6 +3,8 @@ class_name PoolBoard
 
 # Identical visual vocabulary to Carrom: layered wood, soft ornament,
 # subtle grain, fine outlines, mint shot planning and flat lit tokens.
+const BALL_SHADER := preload("res://shaders/billiard_ball.gdshader")
+const BALL_TEXTURE_SIZE := 64
 const W := 900.0
 const H := 450.0
 const R := 12.0
@@ -31,6 +33,53 @@ var show_cpu_target := false
 var cpu_target := Vector2.ZERO
 var cue_position := Vector2(220, 225)
 var ghost_position := Vector2(-1000,-1000)
+var _ball_sprite_texture: Texture2D
+var _ball_sprites: Dictionary = {}
+
+func _ready() -> void:
+	# Procedural white source image; the shader supplies the ball's entire appearance.
+	var image := Image.create_empty(BALL_TEXTURE_SIZE, BALL_TEXTURE_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	_ball_sprite_texture = ImageTexture.create_from_image(image)
+	sync_ball_visuals()
+
+func sync_ball_visuals() -> void:
+	if _ball_sprite_texture == null:
+		return
+	for ball in balls:
+		var number: int = int(ball["id"])
+		if not _ball_sprites.has(number):
+			var sprite := Sprite2D.new()
+			sprite.name = "BilliardBall%02d" % number
+			sprite.texture = _ball_sprite_texture
+			sprite.centered = true
+			sprite.scale = Vector2.ONE * ((R * 2.0) / float(BALL_TEXTURE_SIZE))
+			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+			sprite.z_index = 1
+			var material := ShaderMaterial.new()
+			material.shader = BALL_SHADER
+			sprite.material = material
+			add_child(sprite)
+			_ball_sprites[number] = sprite
+		var ball_sprite: Sprite2D = _ball_sprites[number]
+		ball_sprite.visible = not bool(ball["pocketed"])
+		if not ball_sprite.visible:
+			continue
+		ball_sprite.position = ball["pos"]
+		var material: ShaderMaterial = ball_sprite.material as ShaderMaterial
+		var kind: String = ball["kind"]
+		var kind_index := 0
+		if kind == "stripe":
+			kind_index = 1
+		elif kind == "cue":
+			kind_index = 2
+		elif kind == "eight":
+			kind_index = 3
+		var spin: Quaternion = ball["roll"]
+		material.set_shader_parameter("ball_kind", kind_index)
+		material.set_shader_parameter("ball_color", ball["color"])
+		material.set_shader_parameter("ball_spin", Vector4(spin.x, spin.y, spin.z, spin.w))
+
 
 func set_style(index:int) -> void:
 	style_index = posmod(index, STYLE_NAMES.size())
@@ -41,7 +90,7 @@ func _c(key: String) -> Color:
 
 func _draw() -> void:
 	_draw_table()
-	_draw_balls()
+	_draw_ball_shadows()
 	_draw_aim()
 
 func _draw_table() -> void:
@@ -107,36 +156,21 @@ func pocket_points() -> Array[Vector2]:
 func _diamond(pos:Vector2, color:Color, radius:float) -> void:
 	draw_colored_polygon(PackedVector2Array([pos + Vector2(0,-radius),pos + Vector2(radius,0),pos + Vector2(0,radius),pos + Vector2(-radius,0)]), color)
 
-func _draw_balls() -> void:
+func _draw_ball_shadows() -> void:
+	# Contact shadows are drawn *beneath* the rolling shader sprites.
+	# Their direction stays fixed while each sphere rotates independently.
 	for ball in balls:
 		if bool(ball["pocketed"]):
 			continue
 		var pos: Vector2 = ball["pos"]
-		var kind: String = ball["kind"]
-		var col: Color = ball["color"]
-		var edge := Color("#172724") if kind != "eight" else Color("#b6a680")
-		# Flat enamel disks outlined the same way as the Carrom coins.
-		draw_circle(pos + Vector2(1.7,2.3), R + .7, Color(0,0,0,.19), true, -1, true)
-		draw_circle(pos, R, edge, true, -1, true)
-		if kind == "cue":
-			draw_circle(pos + Vector2(-.5,-.6), R - 1.7, Color("#fcf5df"), true, -1, true)
-			draw_arc(pos, R - 3.8, 0, TAU, 40, Color("#c8c1aa"), 1.1, true)
-			draw_circle(pos, 2.0, Color("#d1cdbb"), true, -1, true)
-		elif kind == "stripe":
-			draw_circle(pos + Vector2(-.4,-.4), R - 1.6, Color("#f8f2df"), true, -1, true)
-			# Band only spans the interior of the white body, no numbers.
-			draw_rect(Rect2(pos.x - 9.8,pos.y - 4.7,19.6,9.4),col,true)
-			draw_arc(pos, R - 3.5, PI * .10, PI * .90, 18, Color(col, .7), 1.0, true)
-			draw_arc(pos, R - 3.5, PI * 1.10, PI * 1.90, 18, Color(col, .7), 1.0, true)
-		elif kind == "eight":
-			draw_circle(pos + Vector2(-.4,-.4), R - 1.6, Color("#283033"), true, -1, true)
-			draw_arc(pos, R - 3.5,0,TAU,40,Color("#758182"),1.0,true)
-			draw_circle(pos,3.1,Color("#e2cb93"),true,-1,true)
-		else:
-			draw_circle(pos + Vector2(-.4,-.4), R - 1.6, col, true, -1, true)
-			draw_arc(pos,R - 3.5,0,TAU,40,Color("#f6f1dc",.55),1.0,true)
-			draw_circle(pos,2.2,Color("#f7ebd8",.7),true,-1,true)
-		draw_circle(pos + Vector2(-R*.32,-R*.40),2.4,Color(1,1,1,.18),true,-1,true)
+		var speed: Vector2 = ball["vel"]
+		if speed.length_squared() > 240.0 * 240.0:
+			var backwards: Vector2 = -speed.normalized()
+			var trail_length := minf(speed.length() / 250.0, 6.0)
+			draw_line(pos + Vector2(1.4, 3.1) + backwards * trail_length, pos + Vector2(1.4, 3.1), Color(0.03, 0.08, 0.05, 0.085), 7.0, true)
+		draw_circle(pos + Vector2(1.5, 3.3), R + 3.2, Color(0.01, 0.025, 0.02, 0.045), true, -1, true)
+		draw_circle(pos + Vector2(1.2, 2.7), R + 1.4, Color(0.01, 0.025, 0.02, 0.10), true, -1, true)
+		draw_circle(pos + Vector2(0.8, 2.0), R - 1.4, Color(0, 0, 0, 0.085), true, -1, true)
 
 func _draw_aim() -> void:
 	if not show_aim:

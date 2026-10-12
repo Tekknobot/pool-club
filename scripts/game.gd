@@ -366,6 +366,7 @@ func _new_game() -> void:
 			var p := Vector2(655.0 + row * 21.1,PoolBoard.H * .5 + (float(index) - float(row)*.5)*24.25)
 			balls.append(_new_ball(n,p))
 	board.balls = balls
+	board.sync_ball_visuals()
 	board.cue_position = cue_ball["pos"]
 	board.aim_direction = Vector2.RIGHT
 	board.show_aim = true
@@ -387,7 +388,11 @@ func _new_ball(number:int, pos:Vector2) -> Dictionary:
 		col = palette[8]
 	elif number > 0:
 		col = palette[number if number < 8 else number - 8]
-	return {"id":number,"kind":kind,"pos":pos,"vel":Vector2.ZERO,"pocketed":false,"color":col}
+	# Start with subtle nonuniform surface orientations, like real racked balls.
+	var initial_spin := Quaternion(Vector3(0.0, 0.0, 1.0), randf_range(-0.28, 0.28))
+	if kind == "stripe":
+		initial_spin = (initial_spin * Quaternion(Vector3.RIGHT, randf_range(-0.18, 0.18))).normalized()
+	return {"id":number,"kind":kind,"pos":pos,"vel":Vector2.ZERO,"pocketed":false,"color":col,"roll":initial_spin}
 
 func _screen_to_board() -> Vector2:
 	return board.to_local(get_global_mouse_position())
@@ -451,7 +456,8 @@ func _process(delta:float) -> void:
 		if PHYSICS.clear_position(balls,mouse,0):
 			cue_ball["pos"] = mouse
 			board.cue_position = mouse
-			board.queue_redraw()
+			board.sync_ball_visuals()
+		board.queue_redraw()
 	elif phase == "cpu_think":
 		cpu_time -= delta
 		if cpu_time <= 0:
@@ -509,6 +515,7 @@ func _physics_process(delta:float) -> void:
 		sound_pocket.play()
 	elif collision_sound and not sound_click.playing:
 		sound_click.play()
+	board.sync_ball_visuals()
 	board.queue_redraw()
 	if (shot_time > .28 and PHYSICS.is_still(balls)) or shot_time >= 15:
 		for b in balls:
@@ -594,6 +601,7 @@ func _resolve_shot() -> void:
 		else:
 			_set_status("CPU TURN","The computer is reading the table.")
 	_refresh_ui()
+	board.sync_ball_visuals()
 	board.queue_redraw()
 
 func _shot_potted(kind:String) -> bool:
